@@ -1,0 +1,9 @@
+node_modules
+.next
+.data
+src/generated
+pnpm-lock.yaml
+prisma/migrations
+test-results
+.impeccable
+*.md

@@ -1,0 +1,440 @@
+@import "tailwindcss";
+
+/*
+ * Vele: the booking sheet, in Ink & Pencil colours.
+ * Your week is the sheet on the door. Bookings are printed in ink; Vele's
+ * holds are written in pencil marker until you confirm, then they print.
+ *
+ * Palette (kept from Ink & Pencil): cool paper, blue-black ink, slate rules,
+ * red ink only for now and corrections, fountain-pen inks for calendars.
+ * Material: sheets laid on a pale desk, each headed by a printed band;
+ * section rules instead of boxes; calendars on label tape; square corners
+ * (2–3px, like trimmed laminate) and no soft shadows.
+ */
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+:root {
+  color-scheme: light;
+
+  /* The desk the sheets lie on. */
+  --wall: #f3f6f9;
+  --wall-ink: #1c2433;
+  --wall-ink-2: #5b626b;
+  --wall-line: #d9e2ec;
+  --wall-hover: rgb(28 36 51 / 0.06);
+
+  /* Header bands on the sheet: a wash of the paper with ink set on it. */
+  --band: #eef3f8;
+  --band-ink: #1c2433;
+  --band-ink-2: #33405a;
+  --band-line: #d9e2ec;
+  --band-hover: rgb(28 36 51 / 0.07);
+
+  /* The sheet itself. */
+  --paper: #fbfcfd;
+  --paper-2: #f3f6f9;
+  --sheet: #ffffff;
+  --wash: #eef3f8;
+
+  /* Rules. */
+  --rule: #d9e2ec;
+  --rule-faint: #eaf0f5;
+  --rule-strong: #b9c6d4;
+
+  /* Ink. */
+  --ink: #1c2433;
+  --ink-2: #33405a;
+  --graphite: #5b626b;
+  --graphite-soft: #6e757d;
+
+  /* Pencil and marker: Vele's holds, before they are booked. */
+  --pencil: #7a8189;
+  --hand: #5b626b;
+
+  /* Red ink: now, and corrections. */
+  --red-ink: #e4572e;
+  --red-ink-text: #b53a17;
+  --red-wash: #fdece6;
+  --green-ok: #1e6a4a;
+  --amber: #9a5b00;
+  --amber-wash: #fbf1dc;
+  --shadow-ink: 28 36 51;
+
+  /* Calendar inks (index = calendar position). */
+  --ink-0: #2447a3;
+  --ink-1: #1e6146;
+  --ink-2c: #7a2e3b;
+  --ink-3: #6b4b24;
+  --ink-4: #4b3d91;
+  --ink-5: #0f5f6b;
+  --ink-6: #5a5f68;
+
+  /* Label tape: blue-black tape, embossed in paper. */
+  --tape: #1c2433;
+  --tape-text: #fbfcfd;
+
+  --radius-sm: 2px;
+  --radius: 2px;
+  --radius-lg: 3px;
+
+  --hour: 52px;
+  --hatch: 22%;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --wall: #0b0f16;
+    --wall-ink: #e7edf4;
+    --wall-ink-2: #9aa6b5;
+    --wall-line: #243043;
+    --wall-hover: rgb(255 255 255 / 0.07);
+    --band: #18222f;
+    --band-ink: #e7edf4;
+    --band-ink-2: #c3cedc;
+    --band-line: #34435b;
+    --band-hover: rgb(255 255 255 / 0.08);
+    --paper: #0e131b;
+    --paper-2: #111823;
+    --sheet: #151d2a;
+    --wash: #18222f;
+    --rule: #243043;
+    --rule-faint: #19222f;
+    --rule-strong: #34435b;
+    --ink: #e7edf4;
+    --ink-2: #c3cedc;
+    --graphite: #9aa6b5;
+    --graphite-soft: #7d899a;
+    --pencil: #8793a3;
+    --hand: #b3bdca;
+    --red-ink: #f06a43;
+    --red-ink-text: #ff8a66;
+    --red-wash: #3a1e17;
+    --green-ok: #6fc59c;
+    --amber: #e3a64a;
+    --amber-wash: #2f2412;
+    --shadow-ink: 0 0 0;
+    --ink-0: #8fb0ff;
+    --ink-1: #7cc7a2;
+    --ink-2c: #e39aa6;
+    --ink-3: #d8b07a;
+    --ink-4: #b5a8ff;
+    --ink-5: #72c6d3;
+    --ink-6: #a8b0bb;
+    --tape: #e7edf4;
+    --tape-text: #0e131b;
+    --hatch: 34%;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --wall: #0b0f16;
+  --wall-ink: #e7edf4;
+  --wall-ink-2: #9aa6b5;
+  --wall-line: #243043;
+  --wall-hover: rgb(255 255 255 / 0.07);
+  --band: #18222f;
+  --band-ink: #e7edf4;
+  --band-ink-2: #c3cedc;
+  --band-line: #34435b;
+  --band-hover: rgb(255 255 255 / 0.08);
+  --paper: #0e131b;
+  --paper-2: #111823;
+  --sheet: #151d2a;
+  --wash: #18222f;
+  --rule: #243043;
+  --rule-faint: #19222f;
+  --rule-strong: #34435b;
+  --ink: #e7edf4;
+  --ink-2: #c3cedc;
+  --graphite: #9aa6b5;
+  --graphite-soft: #7d899a;
+  --pencil: #8793a3;
+  --hand: #b3bdca;
+  --red-ink: #f06a43;
+  --red-ink-text: #ff8a66;
+  --red-wash: #3a1e17;
+  --green-ok: #6fc59c;
+  --amber: #e3a64a;
+  --amber-wash: #2f2412;
+  --shadow-ink: 0 0 0;
+  --ink-0: #8fb0ff;
+  --ink-1: #7cc7a2;
+  --ink-2c: #e39aa6;
+  --ink-3: #d8b07a;
+  --ink-4: #b5a8ff;
+  --ink-5: #72c6d3;
+  --ink-6: #a8b0bb;
+  --tape: #e7edf4;
+  --tape-text: #0e131b;
+  --hatch: 34%;
+}
+
+@theme inline {
+  --color-wall: var(--wall);
+  --color-wall-ink: var(--wall-ink);
+  --color-wall-ink-2: var(--wall-ink-2);
+  --color-wall-line: var(--wall-line);
+  --color-wall-hover: var(--wall-hover);
+  --color-band: var(--band);
+  --color-band-ink: var(--band-ink);
+  --color-band-ink-2: var(--band-ink-2);
+  --color-band-line: var(--band-line);
+  --color-band-hover: var(--band-hover);
+  --color-paper: var(--paper);
+  --color-paper-2: var(--paper-2);
+  --color-sheet: var(--sheet);
+  --color-wash: var(--wash);
+  --color-rule: var(--rule);
+  --color-rule-faint: var(--rule-faint);
+  --color-rule-strong: var(--rule-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-graphite: var(--graphite);
+  --color-graphite-soft: var(--graphite-soft);
+  --color-pencil: var(--pencil);
+  --color-hand: var(--hand);
+  --color-red-ink: var(--red-ink);
+  --color-red-ink-text: var(--red-ink-text);
+  --color-red-wash: var(--red-wash);
+  --color-green-ok: var(--green-ok);
+  --color-amber: var(--amber);
+  --color-amber-wash: var(--amber-wash);
+  --color-tape: var(--tape);
+  --color-tape-text: var(--tape-text);
+
+  --font-sans: var(--font-franklin), ui-sans-serif, system-ui, sans-serif;
+  --font-hand: var(--font-kalam), "Segoe Print", cursive;
+  --font-mono: var(--font-code), ui-monospace, "SFMono-Regular", monospace;
+
+  /* Seven steps, and nothing between them. */
+  --text-micro: 0.75rem;
+  --text-micro--line-height: 1.35;
+  --text-small: 0.8125rem;
+  --text-small--line-height: 1.4;
+  --text-body: 0.9375rem;
+  --text-body--line-height: 1.5;
+  --text-lead: 1.1875rem;
+  --text-lead--line-height: 1.3;
+  --text-title: 1.875rem;
+  --text-title--line-height: 1.08;
+  --text-headline: 2.5rem;
+  --text-headline--line-height: 1.02;
+  --text-display: 3.75rem;
+  --text-display--line-height: 0.98;
+
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius);
+  --radius-lg: var(--radius-lg);
+
+  /* A sheet lies flat: a hairline edge and a 1px drop, never a soft glow. */
+  --shadow-sheet: 0 0 0 1px rgb(var(--shadow-ink) / 0.14), 0 2px 0 rgb(var(--shadow-ink) / 0.22);
+  --shadow-lift: 0 0 0 1px rgb(var(--shadow-ink) / 0.12), 0 1px 0 rgb(var(--shadow-ink) / 0.2);
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    background: var(--wall);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    font-feature-settings:
+      "tnum" 0,
+      "lnum" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--ink-0) 22%, transparent);
+    color: var(--ink);
+  }
+  input,
+  textarea {
+    caret-color: var(--red-ink);
+  }
+  :focus-visible {
+    outline: 2px solid color-mix(in oklab, var(--ink-0) 70%, transparent);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+  a {
+    text-underline-offset: 3px;
+    text-decoration-thickness: 1px;
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--rule) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--rule);
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 2px;
+  }
+  ::placeholder {
+    color: var(--graphite-soft);
+    opacity: 1;
+  }
+}
+
+@layer utilities {
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* A laminated sheet pinned to the wall. */
+  .sheet {
+    background: var(--paper);
+    color: var(--ink);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sheet);
+  }
+
+  /* The printed header band. */
+  .band {
+    background: var(--band);
+    color: var(--band-ink);
+  }
+
+  /* The booking grid: hour rules at print strength, faint half-hour rules. */
+  .graph-ruling {
+    background-image: linear-gradient(to bottom, var(--rule) 1px, transparent 1px), linear-gradient(to bottom, var(--rule-faint) 1px, transparent 1px);
+    background-size:
+      100% var(--hour),
+      100% calc(var(--hour) / 2);
+  }
+
+  /* Banded rows, the way booking sheets print them. */
+  .banded > :nth-child(even) {
+    background: var(--paper-2);
+  }
+
+  /* Dry-wipe marker: Vele's holds, before they are printed. */
+  .pencil-hatch {
+    background-image: repeating-linear-gradient(-45deg, color-mix(in oklab, var(--pencil) var(--hatch), transparent) 0 1px, transparent 1px 6px);
+  }
+
+  /* Focus time: a single hatch. Unavailable time: cross-hatch. */
+  .focus-hatch {
+    background-image: repeating-linear-gradient(45deg, color-mix(in oklab, currentColor 14%, transparent) 0 1px, transparent 1px 7px);
+  }
+  .blocked-hatch {
+    background-image:
+      repeating-linear-gradient(45deg, color-mix(in oklab, currentColor 14%, transparent) 0 1px, transparent 1px 7px),
+      repeating-linear-gradient(-45deg, color-mix(in oklab, currentColor 14%, transparent) 0 1px, transparent 1px 7px);
+  }
+
+  /* Dymo label tape: embossed white capitals on coloured tape. */
+  .dymo {
+    display: inline-flex;
+    align-items: center;
+    height: 1.25rem;
+    padding: 0 0.4rem;
+    border-radius: 2px;
+    background: var(--tape-color, var(--tape));
+    color: var(--tape-text);
+    font-size: 0.75rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    line-height: 1;
+    text-shadow: 0 1px 0 rgb(var(--shadow-ink) / 0.25);
+    box-shadow:
+      inset 0 1px 0 color-mix(in oklab, var(--tape-text) 14%, transparent),
+      inset 0 -1px 0 rgb(var(--shadow-ink) / 0.35);
+    white-space: nowrap;
+  }
+
+  /* Select chevron, drawn in graphite for each theme. */
+  .select-chevron {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%235b626b' stroke-width='1.75'%3E%3Cpath d='M3 4.5l3 3 3-3'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 12px;
+  }
+
+  /* The desk under the sheets: a faint dot grain. */
+  .paper-grain {
+    background-image: radial-gradient(color-mix(in oklab, var(--rule) 55%, transparent) 0.6px, transparent 0.6px);
+    background-size: 14px 14px;
+  }
+}
+
+/* The one authored motion: a confirmed hold prints, left to right, like a print head. */
+@keyframes ink-in {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+.animate-ink-in {
+  animation: ink-in 640ms var(--ease-out-expo) both;
+}
+
+@keyframes pencil-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.animate-pencil-in {
+  animation: pencil-in 260ms var(--ease-out-quart) both;
+}
+
+@keyframes caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+.animate-caret {
+  animation: caret-blink 1s steps(1) infinite;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .select-chevron {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%239aa6b5' stroke-width='1.75'%3E%3Cpath d='M3 4.5l3 3 3-3'/%3E%3C/svg%3E");
+  }
+}
+:root[data-theme="dark"] .select-chevron {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%239aa6b5' stroke-width='1.75'%3E%3Cpath d='M3 4.5l3 3 3-3'/%3E%3C/svg%3E");
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-ink-in,
+  .animate-pencil-in {
+    animation: none;
+  }
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

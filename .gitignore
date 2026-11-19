@@ -1,0 +1,45 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+
+# testing
+/coverage
+/test-results
+/playwright-report
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# generated
+/src/generated
+
+# local database cluster (scripts/local-postgres.mjs)
+/.data
+
+# env files: secrets never leave the machine; the template is committed
+.env
+.env.*
+!.env.example
+
+# local tooling state (design tool workspace, editor/agent settings)
+/.impeccable/
+/.claude/
+
+# misc
+.DS_Store
+*.pem
+*.log
+npm-debug.log*
+.pnpm-debug.log*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts

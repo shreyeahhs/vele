@@ -1,0 +1,704 @@
+// Vele data model.
+//
+// Multi-tenant by construction: every row that holds calendar, booking, AI or
+// messaging data carries a `userId`, and every service query filters on it.
+// Timestamps are stored in UTC (`timestamptz`); local wall-clock values (working
+// hours, lunch) are stored as "HH:mm" strings interpreted in the user's zone.
+//
+// Vele is its own calendar: events are created by hand or through the
+// assistant (web or messaging), and by people booking through booking links.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Identity (Better Auth core tables + admin plugin fields)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(3)
+  // Better Auth admin plugin
+  role          String?   @default("user")
+  banned        Boolean?  @default(false)
+  banReason     String?
+  banExpires    DateTime? @db.Timestamptz(3)
+
+  // Profile
+  timezone     String    @default("Europe/London")
+  locale       String    @default("en-GB")
+  timeFormat   String    @default("24h") // "24h" | "12h"
+  weekStartsOn Int       @default(1) // ISO weekday, 1 = Monday
+  onboardedAt  DateTime? @db.Timestamptz(3)
+
+  sessions            Session[]
+  accounts            Account[]
+  calendars           Calendar[]
+  events              CalendarEvent[]
+  eventAttendees      EventAttendee[]
+  contacts            Contact[]
+  schedulingPrefs     SchedulingPreferences?
+  availabilityRules   AvailabilityRule[]
+  preferences         UserPreference[]
+  bookingProfile      BookingProfile?
+  meetingTypes        MeetingType[]
+  bookings            Booking[]
+  bookingInvites      BookingInvite[]
+  conversations       Conversation[]
+  messages            ConversationMessage[]
+  pendingActions      PendingAction[]
+  aiRuns              AiRun[]
+  notifications       Notification[]
+  auditLogs           AuditLog[]
+  messagingIdentities MessagingIdentity[]
+  messagingLinkCodes  MessagingLinkCode[]
+
+  @@map("users")
+}
+
+model Session {
+  id             String   @id
+  expiresAt      DateTime @db.Timestamptz(3)
+  token          String   @unique
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(3)
+  ipAddress      String?
+  userAgent      String?
+  userId         String
+  impersonatedBy String?
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+/// Sign-in credentials (Better Auth). Email + password lives here as a hashed password.
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime? @db.Timestamptz(3)
+  refreshTokenExpiresAt DateTime? @db.Timestamptz(3)
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt             DateTime  @updatedAt @db.Timestamptz(3)
+
+  @@index([userId])
+  @@map("auth_accounts")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime @db.Timestamptz(3)
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime @default(now()) @updatedAt @db.Timestamptz(3)
+
+  @@index([identifier])
+  @@map("verifications")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Calendars and events
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// A user's own calendars ("Work", "Personal", ...). Events always belong to one.
+model Calendar {
+  id                    String   @id @default(cuid())
+  userId                String
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name                  String
+  description           String?
+  /// Optional user colour; null uses the calendar's position in the palette.
+  color                 String?
+  position              Int      @default(0)
+  isDefault             Boolean  @default(false)
+  isVisible             Boolean  @default(true)
+  includeInAvailability Boolean  @default(true)
+  /// Personal calendars hold plans, not meetings: they still block time, but
+  /// are not counted as meetings or flagged for being outside working hours.
+  isPersonal            Boolean  @default(false)
+  createdAt             DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt             DateTime @updatedAt @db.Timestamptz(3)
+
+  events CalendarEvent[]
+
+  @@index([userId])
+  @@map("calendars")
+}
+
+enum EventStatus {
+  CONFIRMED
+  TENTATIVE
+  CANCELLED
+}
+
+/// How the event affects availability.
+enum EventShowAs {
+  BUSY
+  TENTATIVE
+  FREE
+  OUT_OF_OFFICE
+}
+
+enum EventKind {
+  EVENT
+  FOCUS
+  BLOCKED
+  OUT_OF_OFFICE
+}
+
+/// Detected from a pasted join link; Vele does not create meetings in these services.
+enum MeetingProvider {
+  NONE
+  TEAMS
+  GOOGLE_MEET
+  ZOOM
+  OTHER
+}
+
+enum EventSource {
+  MANUAL
+  ASSISTANT
+  BOOKING
+}
+
+model CalendarEvent {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  calendarId String
+  calendar   Calendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+  /// Stable iCalendar UID used in invitations (.ics) so updates replace the original.
+  iCalUid    String   @unique
+  /// iCalendar SEQUENCE, incremented on every change that attendees are told about.
+  sequence   Int      @default(0)
+
+  title           String
+  description     String?
+  location        String?
+  meetingUrl      String?
+  meetingProvider MeetingProvider @default(NONE)
+
+  startTime DateTime @db.Timestamptz(3)
+  endTime   DateTime @db.Timestamptz(3)
+  /// IANA zone the event was authored in (recurrence is expanded in this zone).
+  timezone  String
+  isAllDay  Boolean  @default(false)
+  /// For all-day events: local dates (YYYY-MM-DD), end exclusive.
+  startDate String?
+  endDate   String?
+
+  status    EventStatus @default(CONFIRMED)
+  showAs    EventShowAs @default(BUSY)
+  kind      EventKind   @default(EVENT)
+  isPrivate Boolean     @default(false)
+
+  /// Recurring series master. Occurrences are expanded at read time.
+  isRecurringMaster Boolean   @default(false)
+  recurrence        String[] // RRULE / EXDATE lines
+  /// Exceptions (moved or cancelled occurrences) point at their series master.
+  seriesId          String?
+  originalStartTime DateTime? @db.Timestamptz(3)
+
+  source    EventSource @default(MANUAL)
+  bookingId String?     @unique
+  booking   Booking?    @relation("BookingEvent", fields: [bookingId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  attendees EventAttendee[]
+
+  @@index([userId, startTime])
+  @@index([userId, endTime])
+  @@index([userId, isRecurringMaster])
+  @@index([userId, seriesId])
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "calendar_events_title_trgm")
+  @@index([location(ops: raw("gin_trgm_ops"))], type: Gin, map: "calendar_events_location_trgm")
+  @@map("calendar_events")
+}
+
+/// People invited to an event (for "meetings with Kevin" and "when did I last meet Sarah").
+model EventAttendee {
+  id      String        @id @default(cuid())
+  userId  String
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  eventId String
+  event   CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  email   String?
+  name    String?
+
+  @@index([userId, email])
+  @@index([userId, name])
+  @@index([eventId])
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "event_attendees_name_trgm")
+  @@map("event_attendees")
+}
+
+enum ContactSource {
+  ATTENDEE
+  BOOKING
+  ASSISTANT
+  MANUAL
+}
+
+/// People the user has met or told Vele about. The assistant may only use an
+/// email address that exists here or that the user typed; it never guesses.
+model Contact {
+  id        String        @id @default(cuid())
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  email     String
+  name      String?
+  source    ContactSource @default(MANUAL)
+  lastMetAt DateTime?     @db.Timestamptz(3)
+  createdAt DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime      @updatedAt @db.Timestamptz(3)
+
+  @@unique([userId, email])
+  @@index([userId, name])
+  @@map("contacts")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Scheduling preferences
+// ─────────────────────────────────────────────────────────────────────────────
+
+model SchedulingPreferences {
+  id                     String   @id @default(cuid())
+  userId                 String   @unique
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bufferBeforeMin        Int      @default(5)
+  bufferAfterMin         Int      @default(10)
+  minimumNoticeMin       Int      @default(120)
+  maxAdvanceDays         Int      @default(60)
+  maxMeetingsPerDay      Int?
+  maxConsecutiveMeetings Int?
+  defaultDurationMin     Int      @default(30)
+  slotIntervalMin        Int      @default(15)
+  lunchStart             String?  @default("12:30")
+  lunchEnd               String?  @default("13:30")
+  /// Soft: meetings outside this band are offered but flagged.
+  preferredStart         String?
+  preferredEnd           String?
+  /// Hard for booking pages, advisory for the owner.
+  noMeetingsBefore       String?
+  noMeetingsAfter        String?
+  /// ISO weekdays (1 = Monday) preferred for meetings; empty = no preference.
+  preferredDays          Int[]
+  treatTentativeAsBusy   Boolean  @default(true)
+  defaultCalendarId      String?
+  /// The user's own meeting room link (Teams, Meet, Zoom) used for video meetings.
+  defaultVideoLink       String?
+  createdAt              DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt              DateTime @updatedAt @db.Timestamptz(3)
+
+  @@map("scheduling_preferences")
+}
+
+enum AvailabilityKind {
+  WORKING_HOURS
+  BLOCKED
+  FOCUS
+}
+
+/// Recurring weekly windows in the user's local time.
+model AvailabilityRule {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      AvailabilityKind
+  dayOfWeek Int // ISO weekday 1..7
+  startTime String // "HH:mm"
+  endTime   String // "HH:mm"
+  label     String?
+  createdAt DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime         @updatedAt @db.Timestamptz(3)
+
+  @@index([userId, kind])
+  @@map("availability_rules")
+}
+
+enum PreferenceSource {
+  SETTINGS
+  ASSISTANT
+}
+
+/// Things the user told Vele ("I don't like meetings before 10"). Structured
+/// where possible (the matching setting is also updated); free-form otherwise.
+model UserPreference {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  key       String
+  value     Json
+  statement String?
+  source    PreferenceSource @default(ASSISTANT)
+  createdAt DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime         @updatedAt @db.Timestamptz(3)
+
+  @@unique([userId, key])
+  @@map("user_preferences")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Booking
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum LinkVisibility {
+  PUBLIC
+  UNLISTED
+  PRIVATE
+}
+
+enum LocationType {
+  NONE
+  IN_PERSON
+  PHONE
+  VIDEO_LINK
+}
+
+model BookingProfile {
+  id             String         @id @default(cuid())
+  userId         String         @unique
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  handle         String         @unique
+  displayName    String
+  headline       String?
+  welcomeMessage String?
+  visibility     LinkVisibility @default(PUBLIC)
+  createdAt      DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime       @updatedAt @db.Timestamptz(3)
+
+  @@map("booking_profiles")
+}
+
+model MeetingType {
+  id                    String         @id @default(cuid())
+  userId                String
+  user                  User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slug                  String
+  title                 String
+  description           String?
+  durationMin           Int
+  locationType          LocationType   @default(NONE)
+  /// Address, phone number or video link, depending on the location type.
+  locationValue         String?
+  bufferBeforeMin       Int?
+  bufferAfterMin        Int?
+  minimumNoticeMin      Int?
+  maxAdvanceDays        Int?
+  maxPerDay             Int?
+  slotIntervalMin       Int?
+  /// Optional per-type weekly windows [{ day, start, end }] replacing working hours.
+  availabilityOverride  Json?
+  /// Calendars checked for conflicts; empty = every calendar included in availability.
+  conflictCalendarIds   String[]
+  destinationCalendarId String?
+  visibility            LinkVisibility @default(PUBLIC)
+  isActive              Boolean        @default(true)
+  position              Int            @default(0)
+  createdAt             DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt             DateTime       @updatedAt @db.Timestamptz(3)
+
+  bookings Booking[]
+  invites  BookingInvite[]
+
+  @@unique([userId, slug])
+  @@index([userId])
+  @@map("meeting_types")
+}
+
+enum BookingStatus {
+  CONFIRMED
+  CANCELLED
+  RESCHEDULED
+}
+
+/// Double booking is prevented at the database level by the exclusion
+/// constraint `bookings_no_overlap` (see migrations), in addition to the
+/// server-side re-check performed inside an advisory-locked transaction.
+model Booking {
+  id              String        @id @default(cuid())
+  userId          String
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  meetingTypeId   String?
+  meetingType     MeetingType?  @relation(fields: [meetingTypeId], references: [id], onDelete: SetNull)
+  status          BookingStatus @default(CONFIRMED)
+  startTime       DateTime      @db.Timestamptz(3)
+  endTime         DateTime      @db.Timestamptz(3)
+  title           String
+  inviteeName     String
+  inviteeEmail    String
+  inviteeTimezone String
+  message         String?
+  locationType    LocationType  @default(NONE)
+  locationValue   String?
+  meetingUrl      String?
+  manageTokenHash String        @unique
+  cancelledAt     DateTime?     @db.Timestamptz(3)
+  cancelReason    String?
+  cancelledBy     String? // "host" | "invitee"
+  rescheduledToId String?
+  createdAt       DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime      @updatedAt @db.Timestamptz(3)
+
+  event         CalendarEvent? @relation("BookingEvent")
+  notifications Notification[]
+
+  @@index([userId, startTime])
+  @@index([inviteeEmail])
+  @@map("bookings")
+}
+
+/// Private booking links: a secret token that unlocks a PRIVATE meeting type.
+model BookingInvite {
+  id            String       @id @default(cuid())
+  userId        String
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  meetingTypeId String?
+  meetingType   MeetingType? @relation(fields: [meetingTypeId], references: [id], onDelete: Cascade)
+  tokenHash     String       @unique
+  label         String?
+  singleUse     Boolean      @default(false)
+  usedAt        DateTime?    @db.Timestamptz(3)
+  expiresAt     DateTime?    @db.Timestamptz(3)
+  revokedAt     DateTime?    @db.Timestamptz(3)
+  createdAt     DateTime     @default(now()) @db.Timestamptz(3)
+
+  @@index([userId])
+  @@map("booking_invites")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Assistant
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum Channel {
+  WEB
+  TELEGRAM
+  WHATSAPP
+}
+
+model Conversation {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel       Channel   @default(WEB)
+  title         String?
+  lastMessageAt DateTime  @default(now()) @db.Timestamptz(3)
+  archivedAt    DateTime? @db.Timestamptz(3)
+  createdAt     DateTime  @default(now()) @db.Timestamptz(3)
+
+  messages       ConversationMessage[]
+  pendingActions PendingAction[]
+  aiRuns         AiRun[]
+
+  @@index([userId, lastMessageAt])
+  @@map("conversations")
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+}
+
+model ConversationMessage {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role           MessageRole
+  /// Plain text shown in the UI.
+  text           String
+  /// The exact model transcript for this turn (function calls, results, thought
+  /// signatures), replayed verbatim on the next turn.
+  blocks         Json
+  /// UI artefacts: working trace, slot proposals, pending action ids, created events.
+  ui             Json?
+  createdAt      DateTime     @default(now()) @db.Timestamptz(3)
+
+  @@index([conversationId, createdAt])
+  @@map("conversation_messages")
+}
+
+enum PendingActionStatus {
+  PENDING
+  EXECUTED
+  DECLINED
+  EXPIRED
+  FAILED
+}
+
+/// A change Vele has pencilled in and that needs the user's explicit OK.
+model PendingAction {
+  id             String              @id @default(cuid())
+  userId         String
+  user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversationId String?
+  conversation   Conversation?       @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  kind           String // create_event | update_event | cancel_event
+  payload        Json
+  /// Human readback: title, when, calendar, attendees, consequences.
+  summary        Json
+  status         PendingActionStatus @default(PENDING)
+  result         Json?
+  error          String?
+  expiresAt      DateTime            @db.Timestamptz(3)
+  resolvedAt     DateTime?           @db.Timestamptz(3)
+  createdAt      DateTime            @default(now()) @db.Timestamptz(3)
+
+  @@index([userId, status])
+  @@map("pending_actions")
+}
+
+/// Observability for every assistant turn. Holds counts and timings, never content.
+model AiRun {
+  id             String        @id @default(cuid())
+  userId         String
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversationId String?
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  channel        Channel       @default(WEB)
+  provider       String
+  model          String
+  status         String // ok | error | blocked | max_tokens | offline
+  iterations     Int           @default(0)
+  inputTokens    Int           @default(0)
+  outputTokens   Int           @default(0)
+  thoughtTokens  Int           @default(0)
+  toolCalls      Json? // [{ name, ok, ms }]
+  latencyMs      Int           @default(0)
+  error          String?
+  createdAt      DateTime      @default(now()) @db.Timestamptz(3)
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
+  @@map("ai_runs")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Notifications, messaging, audit
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum NotificationChannel {
+  EMAIL
+  TELEGRAM
+  WHATSAPP
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENT
+  LOGGED
+  FAILED
+  SKIPPED
+}
+
+model Notification {
+  id                String              @id @default(cuid())
+  userId            String
+  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bookingId         String?
+  booking           Booking?            @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  channel           NotificationChannel
+  type              String // booking_confirmed | booking_cancelled | booking_rescheduled | invitation | cancellation | magic_link
+  recipient         String
+  subject           String?
+  status            NotificationStatus  @default(QUEUED)
+  provider          String?
+  providerMessageId String?
+  error             String?
+  attempts          Int                 @default(0)
+  /// Rendered message, kept only while unsent (for retries) or when the
+  /// console (development) email provider is in use.
+  payload           Json?
+  createdAt         DateTime            @default(now()) @db.Timestamptz(3)
+  sentAt            DateTime?           @db.Timestamptz(3)
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+  @@index([bookingId])
+  @@map("notifications")
+}
+
+enum MessagingProviderId {
+  TELEGRAM
+  WHATSAPP
+}
+
+model MessagingIdentity {
+  id             String              @id @default(cuid())
+  userId         String
+  user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider       MessagingProviderId
+  externalUserId String // Telegram chat id, WhatsApp phone number (E.164)
+  displayName    String?
+  createdAt      DateTime            @default(now()) @db.Timestamptz(3)
+
+  @@unique([provider, externalUserId])
+  @@index([userId])
+  @@map("messaging_identities")
+}
+
+model MessagingLinkCode {
+  id        String              @id @default(cuid())
+  userId    String
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider  MessagingProviderId
+  codeHash  String              @unique
+  expiresAt DateTime            @db.Timestamptz(3)
+  usedAt    DateTime?           @db.Timestamptz(3)
+  createdAt DateTime            @default(now()) @db.Timestamptz(3)
+
+  @@index([userId])
+  @@map("messaging_link_codes")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  actorType  String // user | assistant | system | public
+  action     String // e.g. event.create, booking.cancel
+  targetType String?
+  targetId   String?
+  /// Identifiers and counts only; never event titles, descriptions or tokens.
+  metadata   Json?
+  ipHash     String?
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
+  @@map("audit_logs")
+}
+
+/// Fixed-window rate-limit counters.
+model RateLimitBucket {
+  key     String   @id
+  count   Int
+  resetAt DateTime @db.Timestamptz(3)
+
+  @@index([resetAt])
+  @@map("rate_limit_buckets")
+}
